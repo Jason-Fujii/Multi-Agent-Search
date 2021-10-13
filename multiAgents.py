@@ -69,12 +69,54 @@ class ReflexAgent(Agent):
         # Useful information you can extract from a GameState (pacman.py)
         successorGameState = currentGameState.generatePacmanSuccessor(action)
         newPos = successorGameState.getPacmanPosition()
+        #Food is represented in a True/False Grid. 
+        #T: Food exists there
+        #F: Food doesn't exist there
         newFood = successorGameState.getFood()
+        #Shows the Ghost's states
         newGhostStates = successorGameState.getGhostStates()
+        #Represented by an integer for how long the Ghost remains scared
         newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
+
+        # print(str(successorGameState))
+        print("Pacman: ",str(newPos))
+        # print("Food at:\n",str(newFood))
+        # print(str(newGhostStates))
+        # print(str(newScaredTimes))
+        print("Ghost: ", str(newGhostStates[0].getPosition()))
+
+
+        #Get Distance from Ghost
+        distFromGhost = calcDistance(newPos, newGhostStates[0].getPosition())
+        print("Distance from Ghost: ",distFromGhost)
+
+        #Find Food Locations
+        foodLoc = []
+        for x in range(4):
+            for y in range(9):
+                if newFood[x][y] == True:
+                    foodLoc.append([x,y])
+
+        #print("Food Locations: ",str(foodLoc))
+
+        #Find Food Distances
+        distFromFood = []
+        for x in range(len(foodLoc)):
+            distFromFood.append(calcDistance(newPos, foodLoc[x]))
+
+        print("Distance from Food: ", distFromFood)
 
         "*** YOUR CODE HERE ***"
         return successorGameState.getScore()
+
+def calcDistance(pos1, pos2):
+    """
+    This function will calculate the Manhattan distance of 2 objects
+    """
+    xDist = abs(pos1[0] - pos2[0])
+    yDist = abs(pos1[1] - pos2[1])
+
+    return xDist + yDist
 
 def scoreEvaluationFunction(currentGameState):
     """
