@@ -79,44 +79,219 @@ class ReflexAgent(Agent):
         newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
 
         # print(str(successorGameState))
-        print("Pacman: ",str(newPos))
+        # print("Pacman: ",str(newPos))
         # print("Food at:\n",str(newFood))
         # print(str(newGhostStates))
         # print(str(newScaredTimes))
-        print("Ghost: ", str(newGhostStates[0].getPosition()))
-
-
-        #Get Distance from Ghost
-        distFromGhost = calcDistance(newPos, newGhostStates[0].getPosition())
-        print("Distance from Ghost: ",distFromGhost)
-
-        #Find Food Locations
-        foodLoc = []
-        for x in range(4):
-            for y in range(9):
-                if newFood[x][y] == True:
-                    foodLoc.append([x,y])
-
-        #print("Food Locations: ",str(foodLoc))
-
-        #Find Food Distances
-        distFromFood = []
-        for x in range(len(foodLoc)):
-            distFromFood.append(calcDistance(newPos, foodLoc[x]))
-
-        print("Distance from Food: ", distFromFood)
+        # print("Ghost: ", str(newGhostStates[0].getPosition()))
 
         "*** YOUR CODE HERE ***"
-        return successorGameState.getScore()
+        #the number of food in successorGameState
+        numFood = newFood.count()
+        #the effect of the distance between pacman and normal ghost, scared ghost
+        minPacGhost =  newFood.height + newFood.width
+        #initialize a value for the chance of eating a scared ghost
+        eatScaredChance_Max = 0
+        #initialize a value to store the position of an eatable ghost
+        eatableGhost = None
+        #for each ghost
+        for i in range(len(newGhostStates)):
+            #the manhattan distance between ghost and pacman
+            pacGhostDis = manhattanDistance(newPos,newGhostStates[i].configuration.pos)
+            #the chance of eating a scared ghost
+            #if the manhattance distance is bigger than the scared time, then the chance is 0
+            eatScaredChance = max([0,newGhostStates[i].scaredTimer-pacGhostDis])
+            #we only care about the closest and not scared ghost
+            if pacGhostDis < minPacGhost and newGhostStates[i].scaredTimer==0:
+                minPacGhost = pacGhostDis
+            #we only care about the biggest chance of eating a scared ghost, we eat it first
+            if eatScaredChance > eatScaredChance_Max:
+                eatScaredChance_Max = eatScaredChance
+        #the secure distance is 3, after both pacman and ghost make move, pacman is still safe
+        #find the most dangerous distance
+        pac_Ghost_Distance = min([minPacGhost,3])
+        #find the closet food to pacman
+        minDistance = newFood.height * newFood.width
+        manhattan_PriorityQueue = util.PriorityQueue()
+        #find the position of foods 
+        for y in range(newFood.height):
+            for x in range(newFood.width):
+                if newFood[x][y] == True:
+                    manhattan_PriorityQueue.push((x,y),manhattanDistance(newPos,(x,y)))
+        #we find the closest five foods in order to save time of calculation
+        for i in range(5):
+            if manhattan_PriorityQueue.isEmpty():
+                break
+            else:
+                #maze distance is more accurate than manhattan distance
+                maze = mazeDistance(newPos,manhattan_PriorityQueue.pop(),currentGameState)
+                if maze < minDistance:
+                    minDistance = maze
+        #calculate the evaluation value
+        evaluation = successorGameState.getScore() + 200 * eatScaredChance_Max + 500 * pac_Ghost_Distance  + (1/(minDistance))\
+                                                 / max([numFood,1])
+        return evaluation
 
-def calcDistance(pos1, pos2):
+'''-------------------------use BFS to find maze path between pacman and food-------------------'''        
+from game import Actions
+#position search problem
+class PositionSearchProblem():
     """
-    This function will calculate the Manhattan distance of 2 objects
+    A search problem defines the state space, start state, goal test,
+    successor function and cost function.  This search problem can be
+    used to find paths to a particular point on the pacman board.
+    The state space consists of (x,y) positions in a pacman game.
+    Note: this search problem is fully specified; you should NOT change it.
     """
-    xDist = abs(pos1[0] - pos2[0])
-    yDist = abs(pos1[1] - pos2[1])
 
-    return xDist + yDist
+    def __init__(self, gameState, costFn = lambda x: 1, goal=(1,1), start=None, warn=True, visualize=True):
+        """
+        Stores the start and goal.
+        gameState: A GameState object (pacman.py)
+        costFn: A function from a search state (tuple) to a non-negative number
+        goal: A position in the gameState
+        """
+        self.walls = gameState.getWalls()
+        self.startState = gameState.getPacmanPosition()
+        if start != None: self.startState = start
+        self.goal = goal
+        self.costFn = costFn
+        self.visualize = visualize
+        if warn and (gameState.getNumFood() != 1 or not gameState.hasFood(*goal)):
+            print('Warning: this does not look like a regular search maze')
+
+        # For display purposes
+        self._visited, self._visitedlist, self._expanded = {}, [], 0
+
+    def getStartState(self):
+        return self.startState
+
+    def isGoalState(self, state):
+        isGoal = state == self.goal
+
+        # For display purposes only
+        if isGoal and self.visualize:
+            self._visitedlist.append(state)
+            import __main__
+            if '_display' in dir(__main__):
+                if 'drawExpandedCells' in dir(__main__._display): #@UndefinedVariable
+                    __main__._display.drawExpandedCells(self._visitedlist) #@UndefinedVariable
+
+        return isGoal
+
+    def getSuccessors(self, state):
+        """
+        Returns successor states, the actions they require, and a cost of 1.
+         As noted in search.py:
+             For a given state, this should return a list of triples,
+         (successor, action, stepCost), where 'successor' is a
+         successor to the current state, 'action' is the action
+         required to get there, and 'stepCost' is the incremental
+         cost of expanding to that successor
+        """
+
+        successors = []
+        for action in [Directions.NORTH, Directions.SOUTH, Directions.EAST, Directions.WEST]:
+            x,y = state
+            dx, dy = Actions.directionToVector(action)
+            nextx, nexty = int(x + dx), int(y + dy)
+            if not self.walls[nextx][nexty]:
+                nextState = (nextx, nexty)
+                cost = self.costFn(nextState)
+                successors.append( ( nextState, action, cost) )
+
+        # Bookkeeping for display purposes
+        self._expanded += 1
+        if state not in self._visited:
+            self._visited[state] = True
+            self._visitedlist.append(state)
+
+        return successors
+
+    def getCostOfActions(self, actions):
+        """
+        Returns the cost of a particular sequence of actions.  If those actions
+        include an illegal move, return 999999
+        """
+        if actions == None: return 999999
+        x,y= self.getStartState()
+        cost = 0
+        for action in actions:
+            # Check figure out the next state and see whether its' legal
+            dx, dy = Actions.directionToVector(action)
+            x, y = int(x + dx), int(y + dy)
+            if self.walls[x][y]: return 999999
+            cost += self.costFn((x,y))
+        return cost
+#BFS GSA
+def breadthFirstSearch(problem):
+    """
+    Search the shallowest nodes in the search tree first.
+    """
+    "*** YOUR CODE HERE ***"
+    startState = problem.getStartState()
+    explored = set()
+    Frontier = util.Queue()
+    Frontier.push([[startState,None,0]])
+    while not Frontier.isEmpty():
+        StateTriples = Frontier.pop()
+        node = StateTriples[-1][0]
+        if problem.isGoalState(node):
+            solution = []
+            for i in StateTriples[1:]:
+                solution = solution + [i[1]]
+            return solution
+        if node not in explored:
+            explored.add(node)
+            for i in problem.getSuccessors(node):
+                Frontier.push(StateTriples+[list(i)])
+    print(Frontier.isEmpty())
+    util.raiseNotDefined()
+
+def mazeDistance(point1, point2, gameState):
+    """
+    Returns the maze distance between any two points, using the search functions
+    you have already built.  The gameState can be any game state -- Pacman's position
+    in that state is ignored.
+    Example usage: mazeDistance( (2,4), (5,6), gameState)
+    This might be a useful helper function for your ApproximateSearchAgent.
+    """
+    x1, y1 = int(point1[0]),int(point1[1])
+    x2, y2 = int(point2[0]),int(point2[1])
+    walls = gameState.getWalls()
+    
+    assert not walls[x1][y1], 'point1 is a wall: ' + point1
+    assert not walls[x2][y2], 'point2 is a wall: ' + str(point2)
+    prob = PositionSearchProblem(gameState, start=point1, goal=point2, warn=False, visualize=False)
+    return len(breadthFirstSearch(prob))
+
+
+'''------------------------------------------end of using BFS---------------------------------'''
+
+        # "*** YOUR CODE HERE ***"
+        # minGhostDist = newFood.height + newFood.width
+
+        # #Get Distance from Ghost
+        # for i in range(len(newGhostStates)):
+        #     distFromGhost = manhattanDistance(newPos, newGhostStates[i].getPosition())
+        #     if(distFromGhost < minGhostDist):
+        #         minGhostDist = distFromGhost
+
+        # #Get Distance from food
+        # foodLoc = []
+        # for y in range(newFood.height):
+        #     for x in range(newFood.width):
+        #         if newFood[x][y] == True:
+        #             foodLoc.append([x,y])
+
+        # #Find shortest distance from food
+        # minFoodDist = newFood.height + newFood.width
+        # for i in range(len(foodLoc)):
+        #     distFromFood = manhattanDistance(newPos, foodLoc[i])
+        #     if distFromFood < minFoodDist:
+        #         minFoodDist = distFromFood
+
+        # return successorGameState.getScore() + 500*minGhostDist + (1/minFoodDist)
 
 def scoreEvaluationFunction(currentGameState):
     """
